@@ -224,6 +224,11 @@
       // WORD cell — always fill in
       var tdWord = document.createElement("td");
       tdWord.setAttribute("data-label", "Word");
+      var wordSpacer = document.createElement("div");
+      wordSpacer.className = "sub-label";
+      wordSpacer.style.visibility = "hidden";
+      wordSpacer.textContent = "\u00A0";
+      tdWord.appendChild(wordSpacer);
       var wordInput = document.createElement("input");
       wordInput.type = "text";
       wordInput.className = "field-input word-input";
@@ -373,7 +378,8 @@
       var tdWord = document.createElement("td");
       tdWord.setAttribute("data-label", "Word");
       tdWord.className = r.wordOk ? "cell-correct" : "cell-incorrect";
-      tdWord.innerHTML = '<div class="field-display word-answer">' + (r.ans.word || "—") + "</div>" +
+      tdWord.innerHTML = '<div class="sub-label" style="visibility:hidden;padding-top:8px;">&nbsp;</div>' +
+        '<div class="field-display word-answer">' + (r.ans.word || "—") + "</div>" +
         (!r.wordOk ? '<div class="correct-answer-hint">' + r.item.word + "</div>" : "");
 
       // SYN/ANT cell
@@ -448,26 +454,47 @@
     };
   }
 
-  function proxyFetch(url) {
-    // Use allorigins to bypass CORS
-    var proxy = "https://api.allorigins.win/get?url=" + encodeURIComponent(url);
-    return fetch(proxy)
-      .then(function (r) {
-        if (!r.ok) throw new Error("HTTP " + r.status);
-        return r.json();
-      })
-      .then(function (data) {
-        var text = data.contents || "";
-        if (!text) throw new Error("Empty response");
+  // Google Sheets' published-CSV endpoint redirects to googleusercontent.com,
+  // which does NOT send CORS headers — so a direct fetch from the browser
+  // will always fail here. We go straight to CORS proxies, trying the more
+  // reliable one first and falling back if it's rate-limited or down.
+  var CORS_PROXIES = [
+    function (url) { return "https://corsproxy.io/?url=" + encodeURIComponent(url); },
+    function (url) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url); },
+    function (url) { return url; } // last resort: direct (works for non-Google URLs with CORS already enabled)
+  ];
+
+  function tryFetchText(url) {
+    return fetch(url, { cache: "no-store" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.text();
+    });
+  }
+
+  function fetchWithFallbacks(url, attemptIndex) {
+    attemptIndex = attemptIndex || 0;
+    if (attemptIndex >= CORS_PROXIES.length) {
+      return Promise.reject(new Error("Could not reach the URL. Check that it's public and the link is correct."));
+    }
+    var candidateUrl = CORS_PROXIES[attemptIndex](url);
+    return tryFetchText(candidateUrl)
+      .then(function (text) {
+        // Basic sanity check: CSV/plain text shouldn't look like an HTML login page
+        if (/^\s*<(!doctype|html)/i.test(text)) {
+          throw new Error("Got an HTML page instead of CSV — the sheet may not be public.");
+        }
         return text;
+      })
+      .catch(function () {
+        return fetchWithFallbacks(url, attemptIndex + 1);
       });
   }
 
   function loadWordsFromUrl(url, onSuccess, onError) {
-    proxyFetch(url)
+    fetchWithFallbacks(url)
       .then(function (text) {
         var parsed = parseWordList(text);
-        if (parsed.words.length === 0) throw new Error("No valid words found in sheet.");
+        if (parsed.words.length === 0) throw new Error("No valid words found. Check the sheet's format and that it's published as CSV.");
         state.words = parsed.words;
         onSuccess(parsed);
       })
@@ -603,6 +630,7 @@
     statusEl.className = "fetch-status loading";
     statusEl.innerHTML = '<div class="spinner"></div> Testing…';
     btn.disabled = true;
+    $("troubleshoot-box").style.display = "none";
 
     loadWordsFromUrl(url,
       function (parsed) {
@@ -617,6 +645,7 @@
         statusEl.textContent = "✕ " + err;
         btn.disabled = false;
         $("share-link-box").style.display = "none";
+        $("troubleshoot-box").style.display = "";
       }
     );
   });
@@ -684,6 +713,7 @@
       }
       fb.className = "fetch-status loading"; fb.style.display = "flex";
       fb.innerHTML = '<div class="spinner"></div> Saving &amp; loading…';
+      $("troubleshoot-box").style.display = "none";
 
       loadWordsFromUrl(url,
         function (parsed) {
@@ -703,6 +733,7 @@
         function (err) {
           fb.className = "import-feedback error"; fb.style.display = "";
           fb.textContent = "✕ " + err;
+          $("troubleshoot-box").style.display = "";
         }
       );
 

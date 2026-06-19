@@ -88,7 +88,7 @@
         </table>
         <button id="submit-quiz" class="primary-btn">Submit Answers</button>
       </div>
-      <div class="logo-footer"><div class="logo-placeholder">Logo here</div></div>
+      <div class="logo-footer"><img src="logo.png" alt="IEC logo" class="footer-logo" /></div>
     </div>
   </section>
 
@@ -119,7 +119,7 @@
         </table>
         <button id="next-student" class="primary-btn">Next Student →</button>
       </div>
-      <div class="logo-footer"><div class="logo-placeholder">Logo here</div></div>
+      <div class="logo-footer"><img src="logo.png" alt="IEC logo" class="footer-logo" /></div>
     </div>
   </section>
 
@@ -175,6 +175,16 @@
             <button type="button" id="fetch-sheets-btn" class="fetch-btn">Test</button>
           </div>
           <div class="fetch-status" id="sheets-fetch-status"></div>
+
+          <div class="troubleshoot-box" id="troubleshoot-box" style="display:none;">
+            <div class="troubleshoot-title">Nếu vẫn lỗi, kiểm tra:</div>
+            <ul class="troubleshoot-list">
+              <li>Link phải kết thúc bằng <code>/pub?output=csv</code> (từ <strong>Tệp → Chia sẻ → Xuất bản lên web</strong>, không phải link <code>/edit</code> trên thanh địa chỉ)</li>
+              <li>Sheet đã được <strong>Xuất bản (Publish)</strong> thật — không chỉ bấm "Chia sẻ" thông thường</li>
+              <li>Quyền chia sẻ là <strong>"Bất kỳ ai có đường liên kết"</strong>, không phải "Hạn chế"</li>
+              <li>Thử dán link CSV vào tab trình duyệt mới — nếu thấy chữ thô (không phải trang đăng nhập) thì link đúng</li>
+            </ul>
+          </div>
 
           <!-- Generated share link -->
           <div class="share-link-box" id="share-link-box" style="display:none;">

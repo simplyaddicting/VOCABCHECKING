@@ -57,10 +57,7 @@ If the grading feels too strict or too lenient once you've tried it with real st
 
 ## Logo
 
-Both the quiz and results screens currently show a dashed placeholder box at the bottom. To swap in your real logo:
-
-1. Add your `logo.jpg` file to this folder.
-2. In `index.html`, find `<div class="logo-placeholder">Your logo (jpg) here</div>` (it appears twice) and replace it with `<img src="logo.jpg" alt="School logo" />`.
+A logo (`logo.png`) is already wired into the quiz and results screens via `.footer-logo` in `styles.css`. To swap it for a different image later, just replace `logo.png` with your new file (same filename), or change the `src` in `index.html` if you rename it. The image displays at a fixed height of 40px and keeps its own aspect ratio automatically.
 
 ## Storing results beyond the screen
 
