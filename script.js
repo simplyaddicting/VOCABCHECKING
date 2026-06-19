@@ -69,18 +69,6 @@
   function hasSynonyms(item)  { return item.synonyms && item.synonyms.length > 0; }
   function hasAntonyms(item)  { return item.antonyms && item.antonyms.length > 0; }
 
-  /**
-   * Determine what acts as the CLUE vs what the student must fill in.
-   *
-   * Rules:
-   *  - If word has a meaning → meaning is the clue
-   *    Student fills: word + (syn if any) + (ant if any)
-   *  - If word has NO meaning but has syn/ant → one of syn/ant is the clue
-   *    Student fills: word + (the other of syn/ant if both exist, or definition if somehow present)
-   *
-   * Returns { clueType: "meaning"|"syn"|"ant", testWord: true,
-   *           testMeaning: bool, testSyn: bool, testAnt: bool }
-   */
   function getItemConfig(item) {
     if (hasMeaning(item)) {
       return {
@@ -91,10 +79,6 @@
         testAnt: hasAntonyms(item)
       };
     }
-    // No meaning — use syn or ant as clue
-    // If both exist: show synonyms as clue, test antonyms (and word)
-    // If only syn: show syn as clue, test word
-    // If only ant: show ant as clue, test word
     if (hasSynonyms(item) && hasAntonyms(item)) {
       return {
         clueType: "syn",
@@ -107,14 +91,10 @@
     if (hasSynonyms(item)) {
       return { clueType: "syn", testWord: true, testMeaning: false, testSyn: false, testAnt: false };
     }
-    // only antonyms
     return { clueType: "ant", testWord: true, testMeaning: false, testSyn: false, testAnt: false };
   }
 
   // ─── PARSING ───────────────────────────────────────────────────────────────
-  // Supports both pipe-separated and CSV (comma-separated, quoted) formats
-  // Proper CSV row parser — handles quoted fields containing commas,
-  // e.g. "fleeting, transient" stays as ONE field instead of splitting apart.
   function parseCsvLine(line) {
     var result = [];
     var cur = "";
@@ -123,7 +103,7 @@
       var ch = line[i];
       if (inQuotes) {
         if (ch === '"') {
-          if (line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+          if (line[i + 1] === '"') { cur += '"'; i++; }
           else { inQuotes = false; }
         } else {
           cur += ch;
@@ -148,14 +128,12 @@
       if (!trimmed || trimmed.charAt(0) === "#") return;
 
       var parts;
-      // Detect CSV vs pipe format
       if (trimmed.indexOf("|") !== -1) {
         parts = trimmed.split("|").map(function (p) { return p.trim(); });
       } else {
         parts = parseCsvLine(trimmed);
       }
 
-      // Skip header row if it looks like one (e.g. "word,meaning,synonyms,antonyms")
       if (parts[0] && parts[0].toLowerCase() === "word") return;
 
       if (parts.length < 2 || !parts[0]) { skipped++; return; }
@@ -184,13 +162,11 @@
       var tr = document.createElement("tr");
       tr.dataset.index = idx;
 
-      // # cell
       var tdNum = document.createElement("td");
       tdNum.style.cssText = "width:36px;color:var(--ink-faint);font-family:'Space Mono',monospace;font-size:12px;text-align:right;padding-right:8px;";
       tdNum.textContent = String(idx + 1).padStart(2, "0");
       tdNum.setAttribute("data-label", "#");
 
-      // CLUE cell
       var tdClue = document.createElement("td");
       tdClue.setAttribute("data-label", "Clue");
       tdClue.className = "clue-cell";
@@ -221,7 +197,6 @@
         tdClue.appendChild(clueText);
       }
 
-      // WORD cell — always fill in
       var tdWord = document.createElement("td");
       tdWord.setAttribute("data-label", "Word");
       var wordSpacer = document.createElement("div");
@@ -235,7 +210,6 @@
       wordInput.placeholder = "Enter the word…";
       tdWord.appendChild(wordInput);
 
-      // SYN / ANT cell
       var tdSynAnt = document.createElement("td");
       tdSynAnt.className = "syn-ant-cell";
       tdSynAnt.setAttribute("data-label", "Synonyms & Antonyms");
@@ -321,7 +295,6 @@
       var cfg = getItemConfig(item);
       var ans = answers[idx] || { word: "", synonym: "", antonym: "" };
 
-      // Word is always tested
       var wordOk = norm(ans.word) === norm(item.word);
       correct += wordOk ? 1 : 0;
       total++;
@@ -353,13 +326,11 @@
     graded.results.forEach(function (r, idx) {
       var tr = document.createElement("tr");
 
-      // # cell
       var tdNum = document.createElement("td");
       tdNum.style.cssText = "width:36px;color:var(--ink-faint);font-family:'Space Mono',monospace;font-size:12px;text-align:right;padding-right:8px;";
       tdNum.textContent = String(idx + 1).padStart(2, "0");
       tdNum.setAttribute("data-label", "#");
 
-      // CLUE cell (same display as quiz)
       var tdClue = document.createElement("td");
       tdClue.setAttribute("data-label", "Clue");
       tdClue.className = "clue-cell";
@@ -374,7 +345,6 @@
       }
       tdClue.appendChild(clueTag2); tdClue.appendChild(clueText2);
 
-      // WORD cell
       var tdWord = document.createElement("td");
       tdWord.setAttribute("data-label", "Word");
       tdWord.className = r.wordOk ? "cell-correct" : "cell-incorrect";
@@ -382,7 +352,6 @@
         '<div class="field-display word-answer">' + (r.ans.word || "—") + "</div>" +
         (!r.wordOk ? '<div class="correct-answer-hint">' + r.item.word + "</div>" : "");
 
-      // SYN/ANT cell
       var tdSynAnt = document.createElement("td");
       tdSynAnt.setAttribute("data-label", "Synonyms & Antonyms");
       var blocks = "";
@@ -436,16 +405,23 @@
   // ─── GOOGLE SHEETS AUTO-LOAD ────────────────────────────────────────────────
   var STORAGE_KEY_URL  = "vocab_sheets_url";
   var STORAGE_KEY_TIME = "vocab_time_limit";
+  
+  // Các key dùng cho hệ thống Cache từ vựng chống lỗi F5
+  var STORAGE_KEY_CACHE_WORDS = "vocab_cache_words";
+  var STORAGE_KEY_CACHE_SRC   = "vocab_cache_source_url";
 
   function getSavedUrl()  { try { return localStorage.getItem(STORAGE_KEY_URL) || ""; }  catch(e){ return ""; } }
   function getSavedTime() { try { return parseInt(localStorage.getItem(STORAGE_KEY_TIME) || "5", 10); } catch(e){ return 5; } }
   function saveUrl(url)   { try { localStorage.setItem(STORAGE_KEY_URL, url); }  catch(e){} }
   function saveTime(t)    { try { localStorage.setItem(STORAGE_KEY_TIME, String(t)); } catch(e){} }
-  function clearUrl()     { try { localStorage.removeItem(STORAGE_KEY_URL); } catch(e){} }
+  function clearUrl()     { 
+    try { 
+      localStorage.removeItem(STORAGE_KEY_URL); 
+      localStorage.removeItem(STORAGE_KEY_CACHE_WORDS);
+      localStorage.removeItem(STORAGE_KEY_CACHE_SRC);
+    } catch(e){} 
+  }
 
-  // Reads ?sheet=<csv-url>&time=<minutes> from the page URL.
-  // This is the link teacher shares with students — works on ANY device,
-  // no localStorage needed, because the URL itself carries the sheet link.
   function getUrlParams() {
     var params = new URLSearchParams(window.location.search);
     return {
@@ -454,18 +430,18 @@
     };
   }
 
-  // Google Sheets' published-CSV endpoint redirects to googleusercontent.com,
-  // which does NOT send CORS headers — so a direct fetch from the browser
-  // will always fail here. We go straight to CORS proxies, trying the more
-  // reliable one first and falling back if it's rate-limited or down.
   var CORS_PROXIES = [
     function (url) { return "https://corsproxy.io/?url=" + encodeURIComponent(url); },
     function (url) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url); },
-    function (url) { return url; } // last resort: direct (works for non-Google URLs with CORS already enabled)
+    function (url) { return url; }
   ];
 
+  // ─── ĐÃ SỬA: Thêm Cache Buster phá bộ nhớ đệm cũ của Proxy ─────────────────
   function tryFetchText(url) {
-    return fetch(url, { cache: "no-store" }).then(function (r) {
+    var separator = url.indexOf('?') !== -1 ? '&' : '?';
+    var noCacheUrl = url + separator + "_t=" + new Date().getTime();
+
+    return fetch(noCacheUrl, { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.text();
     });
@@ -479,7 +455,6 @@
     var candidateUrl = CORS_PROXIES[attemptIndex](url);
     return tryFetchText(candidateUrl)
       .then(function (text) {
-        // Basic sanity check: CSV/plain text shouldn't look like an HTML login page
         if (/^\s*<(!doctype|html)/i.test(text)) {
           throw new Error("Got an HTML page instead of CSV — the sheet may not be public.");
         }
@@ -501,10 +476,7 @@
       .catch(function (err) { onError(err.message); });
   }
 
-  // On page load: priority is
-  //   1) ?sheet=... URL param  (the link teacher shares — works for everyone)
-  //   2) localStorage saved URL (teacher's own device, for quick testing)
-  //   3) default sample words
+  // ─── ĐÃ SỬA: Hàm kiểm tra Cache Local khi vừa khởi chạy ────────────────────
   function autoLoadOnStart() {
     var urlParams = getUrlParams();
     var savedUrl = getSavedUrl();
@@ -516,8 +488,26 @@
     state.timeLimitSeconds = minutes * 60;
     $("time-limit-input").value = minutes;
 
-    if (!sheetUrl) return; // use default words, show form immediately
+    if (!sheetUrl) return;
 
+    // KIỂM TRA LOCALCACHE: Nếu trùng URL đang dùng, lấy luôn từ máy để chống lỗi F5 rớt mạng/proxy lỗi
+    try {
+      var localCache = localStorage.getItem(STORAGE_KEY_CACHE_WORDS);
+      var localSrc = localStorage.getItem(STORAGE_KEY_CACHE_SRC);
+      if (localCache && localSrc === sheetUrl) {
+        var cachedWords = JSON.parse(localCache);
+        state.words = cachedWords;
+        
+        $("splash-loading").style.display = "none";
+        $("splash-form").style.display = "";
+        var badge = $("words-loaded-badge");
+        $("words-loaded-count").textContent = "✓ " + cachedWords.length + " words loaded safely (cached)";
+        badge.style.display = "";
+        return; // Ngắt hàm luôn, không chạy xuống phần gọi fetchProxy phía dưới nữa
+      }
+    } catch(e) { console.error("Cache load error:", e); }
+
+    // Nếu không có cache hoặc URL mới hoàn toàn -> Tiến hành fetch mới từ internet
     $("splash-form").style.display = "none";
     $("splash-loading").style.display = "";
 
@@ -528,6 +518,12 @@
         var badge = $("words-loaded-badge");
         $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded for today";
         badge.style.display = "";
+        
+        // LƯU LẠI VÀO CACHE CHO LẦN REFRESH TIẾP THEO
+        try {
+          localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
+          localStorage.setItem(STORAGE_KEY_CACHE_SRC, sheetUrl);
+        } catch(e) {}
       },
       function (errMsg) {
         $("splash-loading").style.display = "none";
@@ -562,7 +558,6 @@
 
   // ─── EVENTS: MODAL ─────────────────────────────────────────────────────────
   function openModal() {
-    // Prefer the URL param (the link actually in use right now), fallback to localStorage
     var urlParams = getUrlParams();
     var current = urlParams.sheet || getSavedUrl();
     $("sheets-url-input").value = current;
@@ -596,7 +591,6 @@
   $("cancel-import-btn").addEventListener("click", closeModal);
   $("modal-import").addEventListener("click", function (e) { if (e.target.id === "modal-import") closeModal(); });
 
-  // Tabs
   document.querySelectorAll(".import-tab").forEach(function (tab) {
     tab.addEventListener("click", function () {
       document.querySelectorAll(".import-tab").forEach(function (t) { t.classList.remove("active"); });
@@ -606,7 +600,6 @@
     });
   });
 
-  // Build a shareable URL: current page base + ?sheet=<csv>&time=<minutes>
   function buildShareLink(sheetUrl, minutes) {
     var base = window.location.origin + window.location.pathname;
     var params = new URLSearchParams();
@@ -621,7 +614,6 @@
     $("share-link-box").style.display = "";
   }
 
-  // Test Sheets URL
   $("fetch-sheets-btn").addEventListener("click", function () {
     var url = $("sheets-url-input").value.trim();
     if (!url) return;
@@ -639,6 +631,12 @@
         btn.disabled = false;
         var minutes = parseInt($("time-limit-input").value, 10) || 5;
         showShareLink(url, minutes);
+        
+        // Cập nhật lại cache mới khi test thành công
+        try {
+          localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
+          localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
+        } catch(e) {}
       },
       function (err) {
         statusEl.className = "fetch-status error";
@@ -650,7 +648,6 @@
     );
   });
 
-  // Copy share link
   $("copy-share-link").addEventListener("click", function () {
     var input = $("share-link-output");
     input.select();
@@ -660,12 +657,10 @@
       btn.textContent = "✓ Copied!";
       setTimeout(function () { btn.textContent = original; }, 1500);
     }).catch(function () {
-      // fallback
       document.execCommand("copy");
     });
   });
 
-  // Clear saved URL
   $("clear-saved-url").addEventListener("click", function () {
     clearUrl();
     $("sheets-url-input").value = "";
@@ -674,7 +669,6 @@
     $("words-loaded-badge").style.display = "none";
   });
 
-  // File upload
   $("import-file").addEventListener("change", function (e) {
     var file = e.target.files[0];
     if (!file) return;
@@ -684,7 +678,6 @@
     reader.readAsText(file);
   });
 
-  // Drag & drop
   var area = $("file-upload-area");
   area.addEventListener("dragover",  function (e) { e.preventDefault(); area.style.borderColor = "var(--blue)"; area.style.background = "var(--blue-light)"; });
   area.addEventListener("dragleave", function ()  { area.style.borderColor = ""; area.style.background = ""; });
@@ -702,8 +695,6 @@
   $("confirm-import").addEventListener("click", function () {
     var fb = $("import-feedback");
     var minutes = parseInt($("time-limit-input").value, 10) || 5;
-
-    // Determine active tab
     var activeTab = document.querySelector(".import-tab.active").dataset.tab;
 
     if (activeTab === "tab-sheets") {
@@ -711,7 +702,7 @@
       if (!url) {
         fb.className = "import-feedback error"; fb.textContent = "Please enter a Google Sheets CSV URL."; return;
       }
-      fb.className = "fetch-status loading"; fb.style.display = "flex";
+      fb.className = "import-feedback loading"; fb.style.display = "flex";
       fb.innerHTML = '<div class="spinner"></div> Saving &amp; loading…';
       $("troubleshoot-box").style.display = "none";
 
@@ -722,13 +713,19 @@
           state.timeLimitSeconds = minutes * 60;
           updateSavedUrlDisplay(url);
           showShareLink(url, minutes);
+          
+          // Đồng bộ cache local luôn khi giáo viên bấm Confirm
+          try {
+            localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
+            localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
+          } catch(e) {}
+
           var badge = $("words-loaded-badge");
           $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded for today";
           badge.style.display = "";
           fb.className = "import-feedback success";
           fb.style.display = "";
           fb.textContent = parsed.words.length + " word(s) loaded · " + minutes + " min limit. Copy the share link below to send to students.";
-          // Don't auto-close — teacher needs to copy the share link
         },
         function (err) {
           fb.className = "import-feedback error"; fb.style.display = "";
@@ -738,7 +735,6 @@
       );
 
     } else {
-      // Paste / file tab
       var text = $("import-textarea").value;
       var parsed = parseWordList(text);
       if (parsed.words.length === 0) {
@@ -747,6 +743,13 @@
       state.words = parsed.words;
       state.timeLimitSeconds = minutes * 60;
       saveTime(minutes);
+      
+      // Xoá cấu hình sheet cũ để tránh conflict dữ liệu khi chạy Paste tab
+      try {
+        localStorage.removeItem(STORAGE_KEY_CACHE_WORDS);
+        localStorage.removeItem(STORAGE_KEY_CACHE_SRC);
+      } catch(e) {}
+
       fb.className = "import-feedback success";
       fb.textContent = parsed.words.length + " word(s) loaded · " + minutes + " min limit." +
         (parsed.skipped ? " (" + parsed.skipped + " skipped)" : "");
