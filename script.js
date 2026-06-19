@@ -477,6 +477,7 @@
   }
 
   // ─── ĐÃ SỬA: Hàm kiểm tra Cache Local khi vừa khởi chạy ────────────────────
+// ─── HÀM CẬP NHẬT: TỰ ĐỘNG ĐỒNG BỘ KHI SHEET THAY ĐỔI + CHỐNG LỖI F5 ───
   function autoLoadOnStart() {
     var urlParams = getUrlParams();
     var savedUrl = getSavedUrl();
@@ -490,42 +491,47 @@
 
     if (!sheetUrl) return;
 
-    // KIỂM TRA LOCALCACHE: Nếu trùng URL đang dùng, lấy luôn từ máy để chống lỗi F5 rớt mạng/proxy lỗi
-    try {
-      var localCache = localStorage.getItem(STORAGE_KEY_CACHE_WORDS);
-      var localSrc = localStorage.getItem(STORAGE_KEY_CACHE_SRC);
-      if (localCache && localSrc === sheetUrl) {
-        var cachedWords = JSON.parse(localCache);
-        state.words = cachedWords;
-        
-        $("splash-loading").style.display = "none";
-        $("splash-form").style.display = "";
-        var badge = $("words-loaded-badge");
-        $("words-loaded-count").textContent = "✓ " + cachedWords.length + " words loaded safely (cached)";
-        badge.style.display = "";
-        return; // Ngắt hàm luôn, không chạy xuống phần gọi fetchProxy phía dưới nữa
-      }
-    } catch(e) { console.error("Cache load error:", e); }
-
-    // Nếu không có cache hoặc URL mới hoàn toàn -> Tiến hành fetch mới từ internet
+    // Hiển thị trạng thái loading để kết nối mạng kiểm tra dữ liệu mới trước
     $("splash-form").style.display = "none";
     $("splash-loading").style.display = "";
 
+    // Tiến hành tải dữ liệu từ Google Sheets (đã có timestamp chống đứng cache proxy)
     loadWordsFromUrl(sheetUrl,
       function (parsed) {
         $("splash-loading").style.display = "none";
         $("splash-form").style.display = "";
         var badge = $("words-loaded-badge");
-        $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded for today";
+        
+        // Cập nhật số từ mới nhất vừa tải trực tiếp từ internet về
+        $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded dynamically";
         badge.style.display = "";
         
-        // LƯU LẠI VÀO CACHE CHO LẦN REFRESH TIẾP THEO
+        // Ghi đè dữ liệu mới nhất (32 từ) này vào bộ nhớ máy, phòng trường hợp học sinh F5
         try {
           localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
           localStorage.setItem(STORAGE_KEY_CACHE_SRC, sheetUrl);
         } catch(e) {}
       },
       function (errMsg) {
+        // NẾU MẤT MẠNG HOẶC PROXY LỖI (Học sinh F5 liên tục bị chặn): Lập tức cứu cánh bằng Cache cũ!
+        try {
+          var localCache = localStorage.getItem(STORAGE_KEY_CACHE_WORDS);
+          var localSrc = localStorage.getItem(STORAGE_KEY_CACHE_SRC);
+          
+          if (localCache && localSrc === sheetUrl) {
+            var cachedWords = JSON.parse(localCache);
+            state.words = cachedWords;
+            
+            $("splash-loading").style.display = "none";
+            $("splash-form").style.display = "";
+            var badge = $("words-loaded-badge");
+            $("words-loaded-count").textContent = "✓ " + cachedWords.length + " words loaded from backup (offline)";
+            badge.style.display = "";
+            return; // Cứu vãn thành công, không hiện màn hình lỗi nữa
+          }
+        } catch(e) { console.error("Backup cache error:", e); }
+
+        // Nếu cả mạng lỗi lẫn không có cache backup thì mới hiện bảng thông báo lỗi
         $("splash-loading").style.display = "none";
         $("splash-error").style.display = "";
         $("splash-error-msg").textContent = errMsg;
