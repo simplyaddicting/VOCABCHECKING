@@ -430,13 +430,36 @@
     };
   }
 
-  var CORS_PROXIES = [
-    function (url) { return "https://corsproxy.io/?url=" + encodeURIComponent(url); },
-    function (url) { return "https://api.allorigins.win/raw?url=" + encodeURIComponent(url); },
-    function (url) { return url; }
-  ];
+  // ─── ĐÃ SỬA: Bỏ CORS proxy bên thứ ba (corsproxy.io / allorigins.win) ──────
+  // Lý do: các proxy miễn phí đó tự cache response ở server của HỌ trong vài
+  // phút. Cache-buster (_t=timestamp) chỉ chặn được cache trình duyệt, không
+  // chặn được cache phía proxy — nên mỗi lần F5, proxy có thể trả bản CSV cũ
+  // hoặc mới tùy may rủi, gây ra hiện tượng "nhảy" giữa sheet cũ và mới.
+  //
+  // Endpoint gviz/tq của chính Google trả CORS header hợp lệ, nên trình duyệt
+  // gọi thẳng được — không cần proxy, không còn lớp cache trung gian nào nữa.
+  // Endpoint này dùng Sheet ID + gid (không cần "Publish to web" như trước).
 
-  // ─── ĐÃ SỬA: Thêm Cache Buster phá bộ nhớ đệm cũ của Proxy ─────────────────
+  function extractSheetId(url) {
+    var m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    return m ? m[1] : null;
+  }
+
+  function extractGid(url) {
+    var m = url.match(/[?&#]gid=(\d+)/);
+    return m ? m[1] : "0";
+  }
+
+  // Chuyển bất kỳ link Google Sheets nào (link edit, link share, hoặc link
+  // /pub?output=csv cũ) thành link CSV gviz/tq chuẩn, hỗ trợ CORS.
+  function toGvizCsvUrl(url) {
+    var id = extractSheetId(url);
+    if (!id) return null;
+    var gid = extractGid(url);
+    return "https://docs.google.com/spreadsheets/d/" + id +
+           "/gviz/tq?tqx=out:csv&gid=" + gid;
+  }
+
   function tryFetchText(url) {
     var separator = url.indexOf('?') !== -1 ? '&' : '?';
     var noCacheUrl = url + separator + "_t=" + new Date().getTime();
@@ -447,29 +470,24 @@
     });
   }
 
-  function fetchWithFallbacks(url, attemptIndex) {
-    attemptIndex = attemptIndex || 0;
-    if (attemptIndex >= CORS_PROXIES.length) {
-      return Promise.reject(new Error("Could not reach the URL. Check that it's public and the link is correct."));
+  function fetchSheetCsv(url) {
+    var gvizUrl = toGvizCsvUrl(url);
+    if (!gvizUrl) {
+      return Promise.reject(new Error("Link Google Sheets không hợp lệ — không tìm thấy Sheet ID. Hãy dán link dạng .../spreadsheets/d/SHEET_ID/edit..."));
     }
-    var candidateUrl = CORS_PROXIES[attemptIndex](url);
-    return tryFetchText(candidateUrl)
-      .then(function (text) {
-        if (/^\s*<(!doctype|html)/i.test(text)) {
-          throw new Error("Got an HTML page instead of CSV — the sheet may not be public.");
-        }
-        return text;
-      })
-      .catch(function () {
-        return fetchWithFallbacks(url, attemptIndex + 1);
-      });
+    return tryFetchText(gvizUrl).then(function (text) {
+      if (/^\s*<(!doctype|html)/i.test(text)) {
+        throw new Error("Sheet chưa public — vào File → Share → General access → \"Anyone with the link\" rồi thử lại.");
+      }
+      return text;
+    });
   }
 
   function loadWordsFromUrl(url, onSuccess, onError) {
-    fetchWithFallbacks(url)
+    fetchSheetCsv(url)
       .then(function (text) {
         var parsed = parseWordList(text);
-        if (parsed.words.length === 0) throw new Error("No valid words found. Check the sheet's format and that it's published as CSV.");
+        if (parsed.words.length === 0) throw new Error("No valid words found. Check the sheet's format and that it's shared publicly.");
         state.words = parsed.words;
         onSuccess(parsed);
       })

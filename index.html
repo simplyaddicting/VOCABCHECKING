@@ -157,21 +157,21 @@
             <div class="step-item">
               <div class="step-num">2</div>
               <div class="step-text">
-                <strong>Publish thành CSV (chỉ làm 1 lần):</strong> File → Share → Publish to web → chọn sheet → <em>Comma-separated values (.csv)</em> → Publish
+                <strong>Chia sẻ Sheet (chỉ làm 1 lần):</strong> Nút <em>Share</em> ở góc trên phải → General access → chọn <em>"Anyone with the link"</em> → Done. <span style="font-size:12px;color:var(--ink-soft);">(Không cần Publish to web nữa.)</span>
               </div>
             </div>
             <div class="step-item">
               <div class="step-num">3</div>
               <div class="step-text">
-                <strong>Dán link CSV vào ô dưới</strong> để tạo link chia sẻ cố định. Gửi link đó cho học sinh — <strong>ai mở link cũng làm đúng bài hôm đó</strong>, vì link tự lấy dữ liệu mới nhất từ Sheet mỗi lần mở.
+                <strong>Dán link Sheet vào ô dưới</strong> (link bình thường trên thanh địa chỉ, dạng <code>.../edit</code>) để tạo link chia sẻ cố định. Gửi link đó cho học sinh — <strong>ai mở link cũng làm đúng bài hôm đó</strong>, vì link luôn lấy dữ liệu mới nhất trực tiếp từ Sheet, không qua bộ nhớ đệm trung gian nào.
               </div>
             </div>
           </div>
 
-          <label class="field-label" for="sheets-url-input">Google Sheets CSV URL</label>
+          <label class="field-label" for="sheets-url-input">Google Sheets URL</label>
           <div class="url-input-wrap">
             <input type="url" id="sheets-url-input" class="modal-input"
-              placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" />
+              placeholder="https://docs.google.com/spreadsheets/d/SHEET_ID/edit" />
             <button type="button" id="fetch-sheets-btn" class="fetch-btn">Test</button>
           </div>
           <div class="fetch-status" id="sheets-fetch-status"></div>
@@ -179,10 +179,9 @@
           <div class="troubleshoot-box" id="troubleshoot-box" style="display:none;">
             <div class="troubleshoot-title">Nếu vẫn lỗi, kiểm tra:</div>
             <ul class="troubleshoot-list">
-              <li>Link phải kết thúc bằng <code>/pub?output=csv</code> (từ <strong>Tệp → Chia sẻ → Xuất bản lên web</strong>, không phải link <code>/edit</code> trên thanh địa chỉ)</li>
-              <li>Sheet đã được <strong>Xuất bản (Publish)</strong> thật — không chỉ bấm "Chia sẻ" thông thường</li>
-              <li>Quyền chia sẻ là <strong>"Bất kỳ ai có đường liên kết"</strong>, không phải "Hạn chế"</li>
-              <li>Thử dán link CSV vào tab trình duyệt mới — nếu thấy chữ thô (không phải trang đăng nhập) thì link đúng</li>
+              <li>Dán link Sheet bình thường (dạng <code>/edit</code> trên thanh địa chỉ) — không cần link Publish to web nữa</li>
+              <li>Quyền chia sẻ là <strong>"Bất kỳ ai có đường liên kết" (Anyone with the link)</strong>, không phải "Hạn chế" (Restricted)</li>
+              <li>Cột phải đúng thứ tự: word | meaning | synonyms | antonyms, và đang ở đúng sheet/tab bạn muốn (nếu nhiều tab, mở đúng tab rồi copy link)</li>
             </ul>
           </div>
 
