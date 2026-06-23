@@ -19,9 +19,9 @@
   // ─── STATE ─────────────────────────────────────────────────────────────────
   var state = {
     words: DEFAULT_WORDS,
-    timeLimitSeconds: 300,
+    timeLimitSeconds: 1800,
     studentName: "",
-    remainingSeconds: 300,
+    remainingSeconds: 1800,
     timerInterval: null
   };
 
