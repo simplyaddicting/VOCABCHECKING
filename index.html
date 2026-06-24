@@ -20,7 +20,6 @@
         <h1>Vocabulary<br><span>Check.</span></h1>
       </div>
 
-      <!-- Loading state (while auto-fetching from URL param) -->
       <div class="splash-card" id="splash-loading" style="display:none;">
         <div style="text-align:center;padding:20px 0;">
           <div class="spinner-lg"></div>
@@ -28,7 +27,6 @@
         </div>
       </div>
 
-      <!-- Error state -->
       <div class="splash-card" id="splash-error" style="display:none;">
         <div style="text-align:center;padding:8px 0 16px;">
           <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
@@ -37,7 +35,6 @@
         </div>
       </div>
 
-      <!-- Normal entry form -->
       <div class="splash-card" id="splash-form">
         <div class="words-loaded-badge" id="words-loaded-badge" style="display:none;">
           <span id="words-loaded-count"></span>
@@ -143,35 +140,45 @@
           </button>
         </div>
 
-        <!-- Tab: Google Sheets -->
+        <!-- Tab: Google Sheets (Master Sheet System) -->
         <div class="tab-panel active" id="tab-sheets">
           <div class="sheets-steps">
             <div class="step-item">
               <div class="step-num">1</div>
               <div class="step-text">
-                <strong>Tạo Google Sheet</strong> với cột theo thứ tự:<br>
-                <code>word | meaning | synonyms | antonyms</code><br>
-                <span style="font-size:12px;color:var(--ink-soft);">Các cột có thể để trống nhưng phải có đủ 4 cột. Mỗi ngày bạn chỉ cần sửa nội dung trong sheet này.</span>
+                <strong>Tạo Sheet Master (1 lần duy nhất):</strong> Tạo 1 Google Sheet bất kỳ.<br>
+                Ô <code>A1</code> = link Google Sheet của bài kiểm tra hôm nay.<br>
+                <span style="font-size:12px;color:var(--ink-soft);">Ô A2 (tùy chọn): số phút giới hạn thời gian.</span>
               </div>
             </div>
             <div class="step-item">
               <div class="step-num">2</div>
               <div class="step-text">
-                <strong>Chia sẻ Sheet (chỉ làm 1 lần):</strong> Nút <em>Share</em> ở góc trên phải → General access → chọn <em>"Anyone with the link"</em> → Done. <span style="font-size:12px;color:var(--ink-soft);">(Không cần Publish to web nữa.)</span>
+                <strong>Chia sẻ Sheet Master (1 lần duy nhất):</strong> Nút <em>Share</em> → General access → <em>"Anyone with the link"</em> → Done.<br>
+                <span style="font-size:12px;color:var(--ink-soft);">Làm tương tự cho mỗi Sheet bài kiểm tra.</span>
               </div>
             </div>
             <div class="step-item">
               <div class="step-num">3</div>
               <div class="step-text">
-                <strong>Dán link Sheet vào ô dưới</strong> (link bình thường trên thanh địa chỉ, dạng <code>.../edit</code>) để tạo link chia sẻ cố định. Gửi link đó cho học sinh — <strong>ai mở link cũng làm đúng bài hôm đó</strong>, vì link luôn lấy dữ liệu mới nhất trực tiếp từ Sheet, không qua bộ nhớ đệm trung gian nào.
+                <strong>Dán link Sheet Master vào ô dưới</strong>, bấm <em>Test</em> rồi <em>Save &amp; Load</em>.<br>
+                Copy <strong>Link chia sẻ</strong> gửi cho học sinh — <strong>dùng mãi mãi, không cần gửi lại</strong>.<br>
+                <span style="font-size:12px;color:var(--ink-soft);">Từ nay mỗi buổi học, bạn chỉ cần sửa ô A1 trong Sheet Master → đổi sang link bài mới. Học sinh F5 là ra bài mới ngay.</span>
+              </div>
+            </div>
+            <div class="step-item">
+              <div class="step-num">4</div>
+              <div class="step-text">
+                <strong>Cấu trúc Sheet bài kiểm tra</strong> (không đổi so với trước):<br>
+                <code>word | meaning | synonyms | antonyms</code>
               </div>
             </div>
           </div>
 
-          <label class="field-label" for="sheets-url-input">Google Sheets URL</label>
+          <label class="field-label" for="master-url-input">Link Google Sheets Master</label>
           <div class="url-input-wrap">
-            <input type="url" id="sheets-url-input" class="modal-input"
-              placeholder="https://docs.google.com/spreadsheets/d/SHEET_ID/edit" />
+            <input type="url" id="master-url-input" class="modal-input"
+              placeholder="https://docs.google.com/spreadsheets/d/MASTER_SHEET_ID/edit" />
             <button type="button" id="fetch-sheets-btn" class="fetch-btn">Test</button>
           </div>
           <div class="fetch-status" id="sheets-fetch-status"></div>
@@ -179,32 +186,32 @@
           <div class="troubleshoot-box" id="troubleshoot-box" style="display:none;">
             <div class="troubleshoot-title">Nếu vẫn lỗi, kiểm tra:</div>
             <ul class="troubleshoot-list">
-              <li>Dán link Sheet bình thường (dạng <code>/edit</code> trên thanh địa chỉ) — không cần link Publish to web nữa</li>
-              <li>Quyền chia sẻ là <strong>"Bất kỳ ai có đường liên kết" (Anyone with the link)</strong>, không phải "Hạn chế" (Restricted)</li>
-              <li>Cột phải đúng thứ tự: word | meaning | synonyms | antonyms, và đang ở đúng sheet/tab bạn muốn (nếu nhiều tab, mở đúng tab rồi copy link)</li>
+              <li>Sheet Master đã được share <strong>"Anyone with the link"</strong> chưa?</li>
+              <li>Ô A1 trong Sheet Master có chứa link Google Sheets bài hôm nay không? (phải là link đầy đủ dạng <code>https://docs.google.com/spreadsheets/d/...</code>)</li>
+              <li>Sheet bài hôm nay (link trong ô A1) cũng đã được share <strong>"Anyone with the link"</strong> chưa?</li>
+              <li>Cột bài kiểm tra đúng thứ tự: word | meaning | synonyms | antonyms</li>
             </ul>
           </div>
 
-          <!-- Generated share link -->
           <div class="share-link-box" id="share-link-box" style="display:none;">
-            <div class="field-label" style="margin-bottom:8px;">🔗 Link chia sẻ cho học sinh (link cố định)</div>
+            <div class="field-label" style="margin-bottom:8px;">🔗 Link chia sẻ cho học sinh (cố định, dùng mãi)</div>
             <div class="url-input-wrap">
               <input type="text" id="share-link-output" class="modal-input" readonly />
               <button type="button" id="copy-share-link" class="fetch-btn">Copy</button>
             </div>
             <p class="hint-text" style="font-size:12px;margin-top:8px;margin-bottom:0;">
-              Gửi link này một lần cho cả lớp — dùng lại mỗi ngày. Bạn chỉ cần sửa nội dung trong Sheet, không cần gửi link mới.
+              Gửi link này <strong>một lần duy nhất</strong> cho học sinh. Mỗi buổi học, bạn chỉ cần sửa ô A1 trong Sheet Master — học sinh F5 là ra bài mới, không cần link mới.
             </p>
           </div>
 
           <div class="saved-url-row" id="saved-url-row" style="display:none;">
-            <div class="saved-url-label">✓ Đã lưu trên máy này:</div>
+            <div class="saved-url-label">✓ Master Sheet đang dùng:</div>
             <div class="saved-url-text" id="saved-url-display"></div>
             <button type="button" id="clear-saved-url" class="clear-btn">Remove</button>
           </div>
 
           <p class="hint-text" style="margin-top:16px;">
-            💡 <strong>Lưu ý:</strong> Link chia sẻ ở trên hoạt động trên <strong>mọi máy</strong> vì link sheet được gắn ngay trong URL. Việc lưu trên máy bạn (localStorage) chỉ để tiện bạn tự test lại sau, không ảnh hưởng đến học sinh.
+            💡 <strong>Lưu ý:</strong> Link chia sẻ hoạt động trên <strong>mọi máy</strong> vì link Master Sheet được gắn vào URL. Việc lưu trên máy bạn chỉ để tiện tự test, không ảnh hưởng đến học sinh.
           </p>
         </div>
 

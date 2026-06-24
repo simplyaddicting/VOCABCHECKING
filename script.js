@@ -402,44 +402,33 @@
     showScreen("screen-results");
   }
 
-  // ─── GOOGLE SHEETS AUTO-LOAD ────────────────────────────────────────────────
-  var STORAGE_KEY_URL  = "vocab_sheets_url";
-  var STORAGE_KEY_TIME = "vocab_time_limit";
-  
-  // Các key dùng cho hệ thống Cache từ vựng chống lỗi F5
+  // ─── STORAGE KEYS ──────────────────────────────────────────────────────────
+  var STORAGE_KEY_MASTER   = "vocab_master_url";
+  var STORAGE_KEY_TIME     = "vocab_time_limit";
   var STORAGE_KEY_CACHE_WORDS = "vocab_cache_words";
   var STORAGE_KEY_CACHE_SRC   = "vocab_cache_source_url";
 
-  function getSavedUrl()  { try { return localStorage.getItem(STORAGE_KEY_URL) || ""; }  catch(e){ return ""; } }
-  function getSavedTime() { try { return parseInt(localStorage.getItem(STORAGE_KEY_TIME) || "5", 10); } catch(e){ return 5; } }
-  function saveUrl(url)   { try { localStorage.setItem(STORAGE_KEY_URL, url); }  catch(e){} }
-  function saveTime(t)    { try { localStorage.setItem(STORAGE_KEY_TIME, String(t)); } catch(e){} }
-  function clearUrl()     { 
-    try { 
-      localStorage.removeItem(STORAGE_KEY_URL); 
+  function getSavedMaster() { try { return localStorage.getItem(STORAGE_KEY_MASTER) || ""; } catch(e){ return ""; } }
+  function getSavedTime()   { try { return parseInt(localStorage.getItem(STORAGE_KEY_TIME) || "5", 10); } catch(e){ return 5; } }
+  function saveMaster(url)  { try { localStorage.setItem(STORAGE_KEY_MASTER, url); } catch(e){} }
+  function saveTime(t)      { try { localStorage.setItem(STORAGE_KEY_TIME, String(t)); } catch(e){} }
+  function clearMaster()    {
+    try {
+      localStorage.removeItem(STORAGE_KEY_MASTER);
       localStorage.removeItem(STORAGE_KEY_CACHE_WORDS);
       localStorage.removeItem(STORAGE_KEY_CACHE_SRC);
-    } catch(e){} 
+    } catch(e) {}
   }
 
   function getUrlParams() {
     var params = new URLSearchParams(window.location.search);
     return {
-      sheet: params.get("sheet") || "",
+      master: params.get("master") || "",
       time: parseInt(params.get("time"), 10) || null
     };
   }
 
-  // ─── ĐÃ SỬA: Bỏ CORS proxy bên thứ ba (corsproxy.io / allorigins.win) ──────
-  // Lý do: các proxy miễn phí đó tự cache response ở server của HỌ trong vài
-  // phút. Cache-buster (_t=timestamp) chỉ chặn được cache trình duyệt, không
-  // chặn được cache phía proxy — nên mỗi lần F5, proxy có thể trả bản CSV cũ
-  // hoặc mới tùy may rủi, gây ra hiện tượng "nhảy" giữa sheet cũ và mới.
-  //
-  // Endpoint gviz/tq của chính Google trả CORS header hợp lệ, nên trình duyệt
-  // gọi thẳng được — không cần proxy, không còn lớp cache trung gian nào nữa.
-  // Endpoint này dùng Sheet ID + gid (không cần "Publish to web" như trước).
-
+  // ─── GOOGLE SHEETS HELPERS ─────────────────────────────────────────────────
   function extractSheetId(url) {
     var m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     return m ? m[1] : null;
@@ -450,8 +439,6 @@
     return m ? m[1] : "0";
   }
 
-  // Chuyển bất kỳ link Google Sheets nào (link edit, link share, hoặc link
-  // /pub?output=csv cũ) thành link CSV gviz/tq chuẩn, hỗ trợ CORS.
   function toGvizCsvUrl(url) {
     var id = extractSheetId(url);
     if (!id) return null;
@@ -461,10 +448,8 @@
   }
 
   function tryFetchText(url) {
-    var separator = url.indexOf('?') !== -1 ? '&' : '?';
-    var noCacheUrl = url + separator + "_t=" + new Date().getTime();
-
-    return fetch(noCacheUrl, { cache: "no-store" }).then(function (r) {
+    var sep = url.indexOf("?") !== -1 ? "&" : "?";
+    return fetch(url + sep + "_t=" + Date.now(), { cache: "no-store" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.text();
     });
@@ -473,13 +458,48 @@
   function fetchSheetCsv(url) {
     var gvizUrl = toGvizCsvUrl(url);
     if (!gvizUrl) {
-      return Promise.reject(new Error("Link Google Sheets không hợp lệ — không tìm thấy Sheet ID. Hãy dán link dạng .../spreadsheets/d/SHEET_ID/edit..."));
+      return Promise.reject(new Error("Link Google Sheets không hợp lệ — không tìm thấy Sheet ID."));
     }
     return tryFetchText(gvizUrl).then(function (text) {
       if (/^\s*<(!doctype|html)/i.test(text)) {
-        throw new Error("Sheet chưa public — vào File → Share → General access → \"Anyone with the link\" rồi thử lại.");
+        throw new Error("Sheet chưa public — vào Share → General access → \"Anyone with the link\".");
       }
       return text;
+    });
+  }
+
+  // ─── MASTER SHEET SYSTEM ───────────────────────────────────────────────────
+  // Sheet Master có cấu trúc:
+  //   A1: URL của sheet bài hôm nay (giáo viên chỉ cần sửa ô này)
+  //   A2 (tùy chọn): số phút giới hạn thời gian
+  //
+  // App sẽ: đọc Master → lấy URL bài → tải bài đó
+
+  function fetchMasterSheet(masterUrl) {
+    return fetchSheetCsv(masterUrl).then(function (csvText) {
+      // Parse ô A1 (dòng đầu tiên, cột đầu tiên) = URL bài hôm nay
+      var lines = csvText.split(/\r?\n/).filter(function(l){ return l.trim(); });
+      if (!lines.length) throw new Error("Sheet Master trống — hãy điền URL bài vào ô A1.");
+
+      // Parse dòng đầu (có thể có CSV quotes)
+      var firstRow = parseCsvLine(lines[0]);
+      var lessonUrl = (firstRow[0] || "").trim();
+      // Bỏ quotes nếu có
+      lessonUrl = lessonUrl.replace(/^["']|["']$/g, "").trim();
+
+      if (!lessonUrl || !extractSheetId(lessonUrl)) {
+        throw new Error("Ô A1 trong Sheet Master không phải link Google Sheets hợp lệ. Hãy dán URL sheet bài vào ô A1.");
+      }
+
+      // Ô A2 tùy chọn: số phút
+      var minutesOverride = null;
+      if (lines.length > 1) {
+        var secondRow = parseCsvLine(lines[1]);
+        var maybeMinutes = parseInt((secondRow[0] || "").trim(), 10);
+        if (!isNaN(maybeMinutes) && maybeMinutes > 0) minutesOverride = maybeMinutes;
+      }
+
+      return { lessonUrl: lessonUrl, minutesOverride: minutesOverride };
     });
   }
 
@@ -487,76 +507,84 @@
     fetchSheetCsv(url)
       .then(function (text) {
         var parsed = parseWordList(text);
-        if (parsed.words.length === 0) throw new Error("No valid words found. Check the sheet's format and that it's shared publicly.");
+        if (parsed.words.length === 0) throw new Error("Không tìm thấy từ hợp lệ. Kiểm tra định dạng sheet và quyền chia sẻ.");
         state.words = parsed.words;
         onSuccess(parsed);
       })
       .catch(function (err) { onError(err.message); });
   }
 
-  // ─── ĐÃ SỬA: Hàm kiểm tra Cache Local khi vừa khởi chạy ────────────────────
-// ─── HÀM CẬP NHẬT: TỰ ĐỘNG ĐỒNG BỘ KHI SHEET THAY ĐỔI + CHỐNG LỖI F5 ───
+  // ─── LOAD QUA MASTER SHEET ─────────────────────────────────────────────────
+  function loadViaMaster(masterUrl, fallbackMinutes, onSuccess, onError) {
+    fetchMasterSheet(masterUrl)
+      .then(function (info) {
+        var minutes = info.minutesOverride || fallbackMinutes;
+        return fetchSheetCsv(info.lessonUrl).then(function(text) {
+          return { text: text, lessonUrl: info.lessonUrl, minutes: minutes };
+        });
+      })
+      .then(function (result) {
+        var parsed = parseWordList(result.text);
+        if (parsed.words.length === 0) throw new Error("Sheet bài hôm nay trống hoặc sai định dạng.");
+        state.words = parsed.words;
+        // Cache lại để phòng F5 mất mạng
+        try {
+          localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
+          localStorage.setItem(STORAGE_KEY_CACHE_SRC, masterUrl);
+        } catch(e) {}
+        onSuccess(parsed, result.minutes);
+      })
+      .catch(function(err) { onError(err.message); });
+  }
+
+  // ─── AUTO LOAD KHI KHỞI ĐỘNG ───────────────────────────────────────────────
   function autoLoadOnStart() {
     var urlParams = getUrlParams();
-    var savedUrl = getSavedUrl();
+    var savedMaster = getSavedMaster();
     var savedTime = getSavedTime();
 
-    var sheetUrl = urlParams.sheet || savedUrl;
+    var masterUrl = urlParams.master || savedMaster;
     var minutes = urlParams.time || savedTime;
 
     state.timeLimitSeconds = minutes * 60;
     $("time-limit-input").value = minutes;
 
-    if (!sheetUrl) return;
+    if (!masterUrl) return;
 
-    // Hiển thị trạng thái loading để kết nối mạng kiểm tra dữ liệu mới trước
     $("splash-form").style.display = "none";
     $("splash-loading").style.display = "";
 
-    // Tiến hành tải dữ liệu từ Google Sheets (đã có timestamp chống đứng cache proxy)
-    loadWordsFromUrl(sheetUrl,
-      function (parsed) {
+    loadViaMaster(masterUrl, minutes,
+      function (parsed, resolvedMinutes) {
+        state.timeLimitSeconds = resolvedMinutes * 60;
+        $("time-limit-input").value = resolvedMinutes;
         $("splash-loading").style.display = "none";
         $("splash-form").style.display = "";
-        var badge = $("words-loaded-badge");
-        
-        // Cập nhật số từ mới nhất vừa tải trực tiếp từ internet về
-        $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded dynamically";
-        badge.style.display = "";
-        
-        // Ghi đè dữ liệu mới nhất (32 từ) này vào bộ nhớ máy, phòng trường hợp học sinh F5
-        try {
-          localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
-          localStorage.setItem(STORAGE_KEY_CACHE_SRC, sheetUrl);
-        } catch(e) {}
+        $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded";
+        $("words-loaded-badge").style.display = "";
       },
       function (errMsg) {
-        // NẾU MẤT MẠNG HOẶC PROXY LỖI (Học sinh F5 liên tục bị chặn): Lập tức cứu cánh bằng Cache cũ!
+        // Thử dùng cache local nếu có
         try {
           var localCache = localStorage.getItem(STORAGE_KEY_CACHE_WORDS);
-          var localSrc = localStorage.getItem(STORAGE_KEY_CACHE_SRC);
-          
-          if (localCache && localSrc === sheetUrl) {
-            var cachedWords = JSON.parse(localCache);
-            state.words = cachedWords;
-            
+          var localSrc   = localStorage.getItem(STORAGE_KEY_CACHE_SRC);
+          if (localCache && localSrc === masterUrl) {
+            state.words = JSON.parse(localCache);
             $("splash-loading").style.display = "none";
             $("splash-form").style.display = "";
-            var badge = $("words-loaded-badge");
-            $("words-loaded-count").textContent = "✓ " + cachedWords.length + " words loaded from backup (offline)";
-            badge.style.display = "";
-            return; // Cứu vãn thành công, không hiện màn hình lỗi nữa
+            $("words-loaded-count").textContent = "✓ " + state.words.length + " words (offline cache)";
+            $("words-loaded-badge").style.display = "";
+            return;
           }
-        } catch(e) { console.error("Backup cache error:", e); }
+        } catch(e) {}
 
-        // Nếu cả mạng lỗi lẫn không có cache backup thì mới hiện bảng thông báo lỗi
         $("splash-loading").style.display = "none";
         $("splash-error").style.display = "";
         $("splash-error-msg").textContent = errMsg;
         setTimeout(function () {
           $("splash-error").style.display = "none";
           $("splash-form").style.display = "";
-        }, 4000);
+        }, 5000);
       }
     );
   }
@@ -583,9 +611,9 @@
   // ─── EVENTS: MODAL ─────────────────────────────────────────────────────────
   function openModal() {
     var urlParams = getUrlParams();
-    var current = urlParams.sheet || getSavedUrl();
-    $("sheets-url-input").value = current;
-    updateSavedUrlDisplay(getSavedUrl());
+    var current = urlParams.master || getSavedMaster();
+    $("master-url-input").value = current;
+    updateSavedUrlDisplay(getSavedMaster());
 
     if (current) {
       var minutes = urlParams.time || getSavedTime();
@@ -598,6 +626,7 @@
     $("import-feedback").className = "import-feedback";
     $("modal-import").classList.add("active");
   }
+
   function closeModal() { $("modal-import").classList.remove("active"); }
 
   function updateSavedUrlDisplay(url) {
@@ -624,39 +653,39 @@
     });
   });
 
-  function buildShareLink(sheetUrl, minutes) {
+  function buildShareLink(masterUrl, minutes) {
     var base = window.location.origin + window.location.pathname;
     var params = new URLSearchParams();
-    params.set("sheet", sheetUrl);
+    params.set("master", masterUrl);
     if (minutes) params.set("time", minutes);
     return base + "?" + params.toString();
   }
 
-  function showShareLink(sheetUrl, minutes) {
-    var link = buildShareLink(sheetUrl, minutes);
+  function showShareLink(masterUrl, minutes) {
+    var link = buildShareLink(masterUrl, minutes);
     $("share-link-output").value = link;
     $("share-link-box").style.display = "";
   }
 
+  // Nút Test Master Sheet
   $("fetch-sheets-btn").addEventListener("click", function () {
-    var url = $("sheets-url-input").value.trim();
+    var url = $("master-url-input").value.trim();
     if (!url) return;
     var statusEl = $("sheets-fetch-status");
     var btn = $("fetch-sheets-btn");
     statusEl.className = "fetch-status loading";
-    statusEl.innerHTML = '<div class="spinner"></div> Testing…';
+    statusEl.innerHTML = '<div class="spinner"></div> Đang kiểm tra Master Sheet…';
     btn.disabled = true;
     $("troubleshoot-box").style.display = "none";
 
-    loadWordsFromUrl(url,
-      function (parsed) {
+    var minutes = parseInt($("time-limit-input").value, 10) || 5;
+
+    loadViaMaster(url, minutes,
+      function (parsed, resolvedMinutes) {
         statusEl.className = "fetch-status success";
-        statusEl.textContent = "✓ " + parsed.words.length + " words found" + (parsed.skipped ? " (" + parsed.skipped + " skipped)" : "");
+        statusEl.textContent = "✓ " + parsed.words.length + " từ tìm thấy trong sheet bài hôm nay";
         btn.disabled = false;
-        var minutes = parseInt($("time-limit-input").value, 10) || 5;
-        showShareLink(url, minutes);
-        
-        // Cập nhật lại cache mới khi test thành công
+        showShareLink(url, resolvedMinutes);
         try {
           localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
           localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
@@ -686,11 +715,12 @@
   });
 
   $("clear-saved-url").addEventListener("click", function () {
-    clearUrl();
-    $("sheets-url-input").value = "";
+    clearMaster();
+    $("master-url-input").value = "";
     updateSavedUrlDisplay("");
     state.words = DEFAULT_WORDS;
     $("words-loaded-badge").style.display = "none";
+    $("share-link-box").style.display = "none";
   });
 
   $("import-file").addEventListener("change", function (e) {
@@ -722,34 +752,31 @@
     var activeTab = document.querySelector(".import-tab.active").dataset.tab;
 
     if (activeTab === "tab-sheets") {
-      var url = $("sheets-url-input").value.trim();
+      var url = $("master-url-input").value.trim();
       if (!url) {
-        fb.className = "import-feedback error"; fb.textContent = "Please enter a Google Sheets CSV URL."; return;
+        fb.className = "import-feedback error"; fb.textContent = "Hãy nhập link Google Sheets Master."; return;
       }
       fb.className = "import-feedback loading"; fb.style.display = "flex";
-      fb.innerHTML = '<div class="spinner"></div> Saving &amp; loading…';
+      fb.innerHTML = '<div class="spinner"></div> Đang tải…';
       $("troubleshoot-box").style.display = "none";
 
-      loadWordsFromUrl(url,
-        function (parsed) {
-          saveUrl(url);
-          saveTime(minutes);
-          state.timeLimitSeconds = minutes * 60;
+      loadViaMaster(url, minutes,
+        function (parsed, resolvedMinutes) {
+          saveMaster(url);
+          saveTime(resolvedMinutes);
+          state.timeLimitSeconds = resolvedMinutes * 60;
+          $("time-limit-input").value = resolvedMinutes;
           updateSavedUrlDisplay(url);
-          showShareLink(url, minutes);
-          
-          // Đồng bộ cache local luôn khi giáo viên bấm Confirm
+          showShareLink(url, resolvedMinutes);
           try {
             localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
             localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
           } catch(e) {}
-
-          var badge = $("words-loaded-badge");
-          $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded for today";
-          badge.style.display = "";
+          $("words-loaded-count").textContent = "✓ " + parsed.words.length + " words loaded";
+          $("words-loaded-badge").style.display = "";
           fb.className = "import-feedback success";
           fb.style.display = "";
-          fb.textContent = parsed.words.length + " word(s) loaded · " + minutes + " min limit. Copy the share link below to send to students.";
+          fb.textContent = parsed.words.length + " từ đã tải · " + resolvedMinutes + " phút. Copy link bên dưới gửi cho học sinh.";
         },
         function (err) {
           fb.className = "import-feedback error"; fb.style.display = "";
@@ -759,24 +786,22 @@
       );
 
     } else {
+      // Tab Paste / File — không dùng Master Sheet
       var text = $("import-textarea").value;
       var parsed = parseWordList(text);
       if (parsed.words.length === 0) {
-        fb.className = "import-feedback error"; fb.textContent = "No valid lines found. Check the format."; return;
+        fb.className = "import-feedback error"; fb.textContent = "Không tìm thấy dòng hợp lệ. Kiểm tra định dạng."; return;
       }
       state.words = parsed.words;
       state.timeLimitSeconds = minutes * 60;
       saveTime(minutes);
-      
-      // Xoá cấu hình sheet cũ để tránh conflict dữ liệu khi chạy Paste tab
       try {
         localStorage.removeItem(STORAGE_KEY_CACHE_WORDS);
         localStorage.removeItem(STORAGE_KEY_CACHE_SRC);
       } catch(e) {}
-
       fb.className = "import-feedback success";
-      fb.textContent = parsed.words.length + " word(s) loaded · " + minutes + " min limit." +
-        (parsed.skipped ? " (" + parsed.skipped + " skipped)" : "");
+      fb.textContent = parsed.words.length + " từ đã tải · " + minutes + " phút." +
+        (parsed.skipped ? " (" + parsed.skipped + " dòng bị bỏ qua)" : "");
       setTimeout(closeModal, 1400);
     }
   });
