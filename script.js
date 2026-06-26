@@ -544,10 +544,9 @@
     var savedTime = getSavedTime();
 
     var masterUrl = urlParams.master || savedMaster;
-    var minutes = urlParams.time || savedTime;
-
-    state.timeLimitSeconds = minutes * 60;
-    $("time-limit-input").value = minutes;
+    // Thời gian lấy từ A2 của Master Sheet (dynamic), không encode vào URL nữa
+    state.timeLimitSeconds = savedTime * 60;
+    $("time-limit-input").value = savedTime;
 
     if (!masterUrl) return;
 
@@ -616,8 +615,7 @@
     updateSavedUrlDisplay(getSavedMaster());
 
     if (current) {
-      var minutes = urlParams.time || getSavedTime();
-      showShareLink(current, minutes);
+      showShareLink(current);
     } else {
       $("share-link-box").style.display = "none";
     }
@@ -653,16 +651,15 @@
     });
   });
 
-  function buildShareLink(masterUrl, minutes) {
+  function buildShareLink(masterUrl) {
     var base = window.location.origin + window.location.pathname;
     var params = new URLSearchParams();
     params.set("master", masterUrl);
-    if (minutes) params.set("time", minutes);
     return base + "?" + params.toString();
   }
 
-  function showShareLink(masterUrl, minutes) {
-    var link = buildShareLink(masterUrl, minutes);
+  function showShareLink(masterUrl) {
+    var link = buildShareLink(masterUrl);
     $("share-link-output").value = link;
     $("share-link-box").style.display = "";
   }
@@ -685,7 +682,7 @@
         statusEl.className = "fetch-status success";
         statusEl.textContent = "✓ " + parsed.words.length + " từ tìm thấy trong sheet bài hôm nay";
         btn.disabled = false;
-        showShareLink(url, resolvedMinutes);
+        showShareLink(url);
         try {
           localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
           localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
@@ -767,7 +764,7 @@
           state.timeLimitSeconds = resolvedMinutes * 60;
           $("time-limit-input").value = resolvedMinutes;
           updateSavedUrlDisplay(url);
-          showShareLink(url, resolvedMinutes);
+          showShareLink(url);
           try {
             localStorage.setItem(STORAGE_KEY_CACHE_WORDS, JSON.stringify(parsed.words));
             localStorage.setItem(STORAGE_KEY_CACHE_SRC, url);
